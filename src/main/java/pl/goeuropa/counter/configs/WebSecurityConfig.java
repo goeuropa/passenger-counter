@@ -38,10 +38,8 @@ public class WebSecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/v1/upload-json"
-                        )
-                        .hasRole("ADMIN")
-                        .anyRequest().permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/v2/devices").permitAll()
+                        .anyRequest().hasRole("ADMIN")
                 )
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)

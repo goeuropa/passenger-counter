@@ -7,8 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import pl.goeuropa.counter.dto.BusLoadDto;
+import pl.goeuropa.counter.dto.ArduinoDeviceSnapshotDto;
 import pl.goeuropa.counter.service.CounterService;
 
 import java.io.BufferedReader;
@@ -33,8 +35,22 @@ public class CounterController {
     public Map<String, BusLoadDto> getAll() {
         var mapOfCounts = service.getCountDetailsWithTimeCheck();
 
-        log.debug("Get {} objects of occupancy", mapOfCounts.size());
+        log.info("Get {} objects of occupancy", mapOfCounts.size());
         return mapOfCounts;
+    }
+
+    @GetMapping("/v2/devices")
+    public Map<String, ArduinoDeviceSnapshotDto> getDeviceAndruino() {
+        var snapshots = service.getDeviceSnapshots();
+        log.info("Get {} device snapshots", snapshots.size());
+        return snapshots;
+    }
+
+    @PostMapping(value = "/v2/devices", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public String uploadDeviceAndruino(@RequestBody ArduinoDeviceSnapshotDto snapshot) {
+        service.saveDeviceSnapshot(snapshot);
+        log.info("Received snapshot from device [{}]", snapshot.getDeviceId());
+        return "Snapshot from " + snapshot.getDeviceId() + " saved.";
     }
 
     @PostMapping(value = "/v1/upload-json", consumes = MediaType.APPLICATION_JSON_VALUE)

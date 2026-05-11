@@ -2,7 +2,7 @@
 - Setup environment var. in docker-compose.yml
 - Create vehicleCapacities.json and set it as `volumes` in docker-compose.yml config
 ----------------------------------------------------------
-### examples:
+### Examples:
 ###### security:
 ###### user: "user"
 ###### password: "password"
@@ -12,7 +12,7 @@
 #######For dev only
 ###### name-mapping: "5:8"
 ----------------------------------------------------------
-## Build 
+## Build Docker
 ```shell
 ./gradlew assemble
 ```
@@ -25,34 +25,72 @@ Command:
 ```shell
 docker compose up -d
 ```
-## Check
-http://localhost:8081/v1/busloads
+## Commands
+
+```shell
+# Build
+./gradlew build
+
+# Run tests
+./gradlew test
+
+# Run app
+./gradlew bootRun
+
+```
+
+The app runs on port 8080. Check health: `http://localhost:8080/v1/busloads` (requires Basic Auth).
 
 ## Architecture
 
-Spring Boot 3.x REST API that collects passenger counts from Pi-based sniffers (or files) and exposes per-vehicle occupancy as a percentage.
+Spring Boot 3.x REST API that collects Bluetooth-based passenger counts from two types of devices and exposes per-vehicle occupancy as a percentage.
 
-**Data flow:**
-1. Raspberry Pi devices POST newline-delimited JSON logs to `POST /v1/upload-json` (Basic Auth required)
-2. `CounterController` streams the request body into `CounterService.asyncParseJsonFile()` (runs on a separate thread via `@Async`)
-3. The service parses each line as `LogEntryDto` (`__REALTIME_TIMESTAMP` + `MESSAGE`), keeps only the newest entry by timestamp
-4. `BusLoadDto` is constructed from the log entry — it regex-parses `MESSAGE` for vehicle name and count, then calculates `currentFullness` (%) using capacity from `PeopleCountRepository.CAPACITY_CONFIGS`
-5. Results are stored in `PeopleCountRepository` (singleton `ConcurrentHashMap`, keyed by vehicle name)
-6. `GET /v1/busloads` returns the map, injecting a `"time"` sentinel entry and evicting records older than 30 minutes or with `currentFullness > 150`
+### Two data-source pipelines
 
-**Optional file-based mode:** When `api.path-to-json-counts-file` is set, `CountsFromFileScheduler` polls that file every N seconds (default 15) and feeds data via `ScheduleTasksService`. Both the scheduler and its service are `@ConditionalOnProperty` gated on that property.
+**v1 — Raspberry Pi sniffer** (`POST /v1/upload-json`, Basic Auth required):
+1. Pi posts newline-delimited JSON journald logs; each line is a `LogEntryDto` with `__REALTIME_TIMESTAMP` (microseconds) and `MESSAGE`
+2. `MESSAGE` format: `"<vehicleName> <count>"` — parsed in `BusLoadDto.parseMessage()` via regex
+3. Controller buffers all lines, hands them to `CounterService.asyncParseJsonFile()` (`@Async`), which keeps only the newest entry by timestamp
+4. Result is stored in `PeopleCountRepository.updatesAboutLoads` (keyed by vehicle name)
 
-**Capacity config:** `vehicleCapacities.json` maps vehicle names to capacity divisors. In Docker it must be mounted at `/app/resources/vehicleCapacities.json`. `CapacitiesConfig` reads it directly from the classpath resources, so the file must exist before the app starts.
+**v2 — Arduino/ESP32 sniffer** (`POST /v2/devices`, **no auth required**):
+1. Device posts a structured `ArduinoDeviceSnapshotDto` (device_id, timestamp, devices list, summary)
+2. `CounterService.saveDeviceSnapshot()` persists it to both `deviceSnapshots` and `updatesAboutLoads` maps
+3. `currentCount` for v2 is taken from `summary.phones` (only phone-category BT devices counted)
 
-**Security:** `POST /v1/upload-json` requires HTTP Basic Auth (`api.security.user` / `api.security.password`). `GET /v1/busloads` is public.
+Both pipelines produce a `BusLoadDto` and land in the same `updatesAboutLoads` map, so `GET /v1/busloads` shows data from both sources merged.
 
-**Dev-only name-mapping:** `api.name-mapping` in `application.yml` is a `oldName:newName` string that remaps one vehicle name at parse time — used for local testing when a device reports under a different ID.
+### Occupancy calculation
+
+`BusLoadDto.getFullness()` looks up the vehicle name in `CAPACITY_CONFIGS` (loaded from `vehicleCapacities.json`) and computes `(currentCount / capacity) * 100`. Returns `Float.NaN` if the vehicle is not in the config.
+
+`vehicleCapacities.json` structure — key is the integer capacity divisor, value is a list of vehicle names:
+```json
+{"vehicles": {"133": ["vehicle_name"], "56": ["other_name"]}}
+```
+
+### Storage and eviction
+
+`PeopleCountRepository` is a manual singleton (`ConcurrentHashMap`). `GET /v1/busloads` injects a `"time"` sentinel entry on every call and evicts records older than 30 minutes or with `currentFullness > 150`.
+
+### Security
+
+- `POST /v2/devices` — public (no auth)
+- All other endpoints — HTTP Basic Auth required (`api.security.user` / `api.security.password`)
+
+### Async executor
+
+`AsyncConfig` provides a `ThreadPoolTaskExecutor` (4 core threads, 10 max, queue capacity 50, `CallerRunsPolicy` on rejection) for all `@Async` methods.
+
+### Optional file-based mode
+
+When `api.path-to-json-counts-file` is set, `CountsFromFileScheduler` polls that file every N seconds (default 15) via `ScheduleTasksService`. Both classes are `@ConditionalOnProperty` gated on that property.
 
 ## Key files
 
-| File | Purpose |
-|------|---------|
-| `src/main/resources/application.yml` | All config; `api.name-mapping` is dev-only |
-| `src/main/resources/vehicleCapacities.json` | Vehicle name → capacity (integer divisor) mapping |
-| `docker-compose.yml` | Volume-mounts the JSON config; env vars for upstream APC/TC URLs |
-| `src/test/resources/application-test.yml` | Test profile — stubs out upstream URLs |
+| File | Purpose                                                                                               |
+|------|-------------------------------------------------------------------------------------------------------|
+| `src/main/resources/application.yml` | All config; `api.name-mapping` (`oldName:newName`) is dev-only vehicle ID remapping                   |
+| `src/main/resources/vehicleCapacities.json` | Vehicle name → capacity divisor mapping (read from app/resources for ability to mapping in container) |
+| `docker-compose.yml` | Volume-mounts the JSON config and sets env vars                                                       |
+| `src/test/resources/application-test.yml` | Test profile — stubs out upstream URLs                                                                |

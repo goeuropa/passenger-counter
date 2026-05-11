@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
-import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -17,12 +16,10 @@ import java.util.Map;
 public class CapacitiesConfig {
     private final Map<Integer, List<String>> vehicleConfigs;
 
-
     public CapacitiesConfig() {
-    ClassPathResource json =  new ClassPathResource("vehicleCapacities.json");
         ObjectMapper objectMapper = new ObjectMapper();
         try {
-            this.vehicleConfigs = objectMapper.readValue(json.getContentAsByteArray(),
+            this.vehicleConfigs = objectMapper.readValue(Paths.get("/app/resources/vehicleCapacities.json").toFile(),
                             VehicleConfigLoader.class)
                     .getVehicles();
             log.info("Loaded from file {} vehicles", vehicleConfigs.size());

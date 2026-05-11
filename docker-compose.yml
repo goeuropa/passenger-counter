@@ -1,5 +1,5 @@
 services:
-  pax:
+  pi:
     build:
       context: .
     environment:
