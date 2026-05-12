@@ -35,7 +35,7 @@ public class JsessionScheduler {
             var key = properties.getVideoKey();
             var account = properties.getVideoAccount();
             var response = restClient.get()
-                    .uri("StandardApiAction_login.action?account={account}&password={key}", account, key)
+                    .uri(properties.getLoginPath() + "?account={account}&password={key}", account, key)
                     .retrieve()
                     .body(Map.class);
             service.setJSessionId(response);

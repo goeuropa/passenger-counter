@@ -4,27 +4,28 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Log4j2
+@Component
 public class CapacitiesConfig {
+
     private final Map<Integer, List<String>> vehicleConfigs;
 
-    public CapacitiesConfig() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        try {
-            this.vehicleConfigs = objectMapper.readValue(Paths.get("/app/resources/vehicleCapacities.json").toFile(),
-                            VehicleConfigLoader.class)
-                    .getVehicles();
-            log.debug("Loaded from file {} vehicles", vehicleConfigs.size());
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to load vehicle config file", e);
-        }
+    public CapacitiesConfig(@Value("${api.capacities-file}") String filePath, ResourceLoader resourceLoader) throws IOException {
+        Resource resource = resourceLoader.getResource(filePath);
+        this.vehicleConfigs = new ObjectMapper()
+                .readValue(resource.getInputStream(), VehicleConfigLoader.class)
+                .getVehicles();
+        log.debug("Loaded from file {} vehicles", vehicleConfigs.size());
     }
 
     public HashMap<String, Integer> getVehiclesAndDivisors() {

@@ -1,9 +1,27 @@
 server:
   port: 8081
 api:
-## Source base URLs & auth
+  ## Source base URLs & auth
   video-url: ${APC_URL}
   video-account: ${ACCOUNT}
   video-key: ${APC_KEY}
   tc-url: ${TC_URL}
   key-agency: ${KEY-AGENCY}
+  ## Capacities file (classpath resource for tests)
+  capacities-file: file:/app/resources/vehicleCapacities.json
+  ## Vehicle ID suffix które występują w service APC
+  apc-suffix: -APC
+  apc2-suffix: -APC2
+  apc2-vehicle-prefix: ME
+  ## Vehicle ID które trzeba odfiltrować bo mają złe dane
+  excluded-vehicle-ids:
+    - ME-8-APC2
+  ## Stale data thresholds
+  stale-ttl-minutes: 35
+  max-fullness-percent: 125
+  ## Polling interval in milliseconds
+  poll-rate-ms: 15000
+  ## APC API endpoint paths
+  login-path: StandardApiAction_login.action
+  people-detail-path: PeopleAction_peopleDetail.action
+  page-records: 10000

@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import pl.goeuropa.counter.configs.ApiProperties;
 import pl.goeuropa.counter.dto.BusLoadDto;
 import pl.goeuropa.counter.dto.IncomeInfoDto;
 import pl.goeuropa.counter.repository.PeopleCountRepository;
@@ -18,7 +19,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
-
 @Slf4j
 @Component
 public class PeopleDetailScheduler {
@@ -26,30 +26,36 @@ public class PeopleDetailScheduler {
     private final RestClient restClient;
     private final ScheduleTasksService service;
     private final JsessionScheduler session;
+    private final ApiProperties properties;
 
-    private final PeopleCountRepository peopleCountRepository = PeopleCountRepository
-            .getInstance();
-    DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-    DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private final PeopleCountRepository peopleCountRepository = PeopleCountRepository.getInstance();
+    private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    public PeopleDetailScheduler(@Qualifier("video") RestClient restClient, ScheduleTasksService service, JsessionScheduler session) {
+    public PeopleDetailScheduler(@Qualifier("video") RestClient restClient,
+                                 ScheduleTasksService service,
+                                 JsessionScheduler session,
+                                 ApiProperties properties) {
         this.restClient = restClient;
         this.service = service;
         this.session = session;
+        this.properties = properties;
     }
 
-    @Scheduled(fixedRate = 15000)
+    @Scheduled(fixedRateString = "${api.poll-rate-ms}")
     public void getBusloads() {
         LocalDateTime now = LocalDateTime.now();
-        String time = now.minusSeconds(15).format(timeFormatter);
+        long offsetSeconds = properties.getPollRateMs() / 1000L;
+        String time = now.minusSeconds(offsetSeconds).format(timeFormatter);
         String date = now.format(dateFormatter);
         try {
             var jsessionid = peopleCountRepository.getJSessionId();
             var vehiIdnos = peopleCountRepository.getVehiIdnosParam();
             var response = restClient.get()
-                    .uri("PeopleAction_peopleDetail.action?" +
-                            "jsession={jsessionid}&begintime={date} {time}&endtime={date} 23:59:59&" +
-                            "vehiIdnos={vehiIdnos}&pageRecords=10000&currentPage=1", jsessionid, date, time, date, vehiIdnos)
+                    .uri(properties.getPeopleDetailPath() + "?" +
+                                    "jsession={jsessionid}&begintime={date} {time}&endtime={date} 23:59:59&" +
+                                    "vehiIdnos={vehiIdnos}&pageRecords={pageRecords}&currentPage=1",
+                            jsessionid, date, time, date, vehiIdnos, properties.getPageRecords())
                     .retrieve()
                     .body(Map.class);
 

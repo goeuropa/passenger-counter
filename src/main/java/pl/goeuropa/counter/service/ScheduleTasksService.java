@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import pl.goeuropa.counter.configs.ApiProperties;
 import pl.goeuropa.counter.dto.BusLoadDto;
 import pl.goeuropa.counter.repository.PeopleCountRepository;
 
@@ -16,14 +17,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ScheduleTasksService {
 
+    private final ApiProperties properties;
     private final PeopleCountRepository peopleCountRepository = PeopleCountRepository.getInstance();
 
     public void extractIdsAndPersist(List<Map<String, String>> vehicleDetails) {
         peopleCountRepository.getVehicleIds().addAll(vehicleDetails.stream()
-                .map(vehicle -> vehicle.get("vehicleName")
-                        .startsWith("ME")
-                        ? vehicle.get("vehicleName").concat("-APC2")
-                        : vehicle.get("vehicleName").concat("-APC"))
+                .map(vehicle -> {
+                    String name = vehicle.get("vehicleName");
+                    return name.startsWith(properties.getApc2VehiclePrefix())
+                            ? name.concat(properties.getApc2Suffix())
+                            : name.concat(properties.getApcSuffix());
+                })
                 .collect(Collectors.toSet()));
         writeIdsAsValidString();
     }
@@ -34,7 +38,8 @@ public class ScheduleTasksService {
     }
 
     private void writeIdsAsValidString() {
-        peopleCountRepository.getVehicleIds().remove("ME-8-APC2");
+        properties.getExcludedVehicleIds().forEach(id ->
+                peopleCountRepository.getVehicleIds().remove(id));
         peopleCountRepository.setVehiIdnosParam(
                 String.join(",",
                         peopleCountRepository.getVehicleIds()));
@@ -46,9 +51,7 @@ public class ScheduleTasksService {
                         .collect(Collectors.toConcurrentMap(
                                 BusLoadDto::getVehicleName,
                                 dto -> dto,
-                                (dto1, dto2) -> {
-                                    return dto1.getTimestamp() > dto2.getTimestamp() ? dto1 : dto2;
-                                }
+                                (dto1, dto2) -> dto1.getTimestamp() > dto2.getTimestamp() ? dto1 : dto2
                         ))
         );
         log.debug("{} dto objects is persisted.", peopleCountRepository.getUpdatesAboutLoads().size());

@@ -10,6 +10,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import static pl.goeuropa.counter.repository.PeopleCountRepository.CAPACITY_CONFIGS;
+import static pl.goeuropa.counter.repository.PeopleCountRepository.SUFFIX_STRIP_REGEX;
 
 @Data
 @NoArgsConstructor
@@ -22,7 +23,7 @@ public class BusLoadDto implements Serializable {
     private long timestamp;
 
     public BusLoadDto(IncomeInfoDto dto) {
-        this.vehicleName = dto.getVehiIdno().replaceAll("(-APC2|-APC)$", "");
+        this.vehicleName = dto.getVehiIdno().replaceAll(SUFFIX_STRIP_REGEX, "");
         this.currentCount = dto.getIncrPeople();
         this.currentFullness = getFullness();
         this.timestamp = getDateTime(dto.getTimeStr()).getTime();
